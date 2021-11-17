@@ -104,6 +104,7 @@ class AWSSRP:
 
     NEW_PASSWORD_REQUIRED_CHALLENGE = "NEW_PASSWORD_REQUIRED"
     PASSWORD_VERIFIER_CHALLENGE = "PASSWORD_VERIFIER"
+    SOFTWARE_TOKEN_MFA_CHALLENGE = "SOFTWARE_TOKEN_MFA"
 
     def __init__(
         self,
@@ -253,21 +254,27 @@ class AWSSRP:
         )
         if response["ChallengeName"] == self.PASSWORD_VERIFIER_CHALLENGE:
             challenge_response = self.process_challenge(response["ChallengeParameters"])
-            tokens = boto_client.respond_to_auth_challenge(
+            return boto_client.respond_to_auth_challenge(
                 ClientId=self.client_id,
                 ChallengeName=self.PASSWORD_VERIFIER_CHALLENGE,
                 ChallengeResponses=challenge_response,
             )
 
-            if tokens.get("ChallengeName") == self.NEW_PASSWORD_REQUIRED_CHALLENGE:
-                raise ForceChangePasswordException(
-                    "Change password before authenticating"
-                )
-
-            return tokens
-
         raise NotImplementedError(
             "The %s challenge is not supported" % response["ChallengeName"]
+        )
+
+    def verify_software_token_mfa_challenge(self, mfa_code, session, client=None):
+        boto_client = self.client or client
+        return boto_client.respond_to_auth_challenge(
+            ClientId=self.client_id,
+            ChallengeName=self.SOFTWARE_TOKEN_MFA_CHALLENGE,
+            Session=session,
+            ChallengeResponses={
+                "SMS_MFA_CODE": mfa_code,
+                "SOFTWARE_TOKEN_MFA_CODE": mfa_code,
+                "USERNAME": self.username,
+            }
         )
 
     def set_new_password_challenge(self, new_password, client=None):
